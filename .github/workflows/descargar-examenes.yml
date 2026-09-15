@@ -1,0 +1,45 @@
+name: Descargar exámenes Diputación de Jaén
+
+# Se ejecuta solo, en los servidores de GitHub (no necesitas tu ordenador
+# encendido). También puedes lanzarlo manualmente desde la pestaña
+# "Actions" de este repositorio con el botón "Run workflow".
+on:
+  schedule:
+    # Todos los lunes a las 07:00 UTC (≈ 09:00 en España en verano,
+    # 08:00 en invierno). Cambia esta línea si quieres otro horario:
+    # https://crontab.guru/ te ayuda a construir la expresión.
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar el script de descarga
+        run: python descargar_examenes_dipujaen.py --output-dir examenes_dipujaen
+
+      - name: Subir los PDF nuevos al repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add examenes_dipujaen
+          if git diff --cached --quiet; then
+            echo "No hay archivos nuevos esta vez."
+          else
+            git commit -m "Actualiza exámenes/plantillas descargados ($(date -u +'%Y-%m-%d'))"
+            git push
+          fi
