@@ -138,26 +138,47 @@ def obtener_convocatorias(session: requests.Session) -> list[dict]:
 def buscar_pdfs_examen(
     session: requests.Session, detalle_url: str, keywords: list[str]
 ) -> list[dict]:
-    """Busca en una página de detalle los enlaces a PDF cuyo texto visible
-    contenga alguna de las palabras clave (examen, plantilla, ...)."""
+    """Busca en una página de detalle los enlaces a PDF relacionados con
+    alguna de las palabras clave (examen, plantilla, ...).
+
+    No basta con mirar el texto del propio enlace: en esta web (y en
+    muchas webs de organismos públicos basadas en tablas) el nombre del
+    documento suele estar en la misma fila o párrafo que el enlace,
+    pero no necesariamente dentro del propio <a> (a veces el enlace solo
+    dice "Descargar" o es un icono). Por eso también miramos el texto
+    del contenedor (fila de tabla, item de lista o párrafo) que rodea
+    al enlace.
+    """
     html = obtener_html(session, detalle_url)
     if not html:
         return []
 
     soup = BeautifulSoup(html, "html.parser")
     encontrados = []
+    urls_vistas = set()
 
     for enlace in soup.find_all("a", href=True):
         href = enlace["href"]
-        texto = texto_normalizado(enlace.get_text())
-
-        if not any(kw in texto for kw in keywords):
-            continue
         if not href.lower().endswith(".pdf"):
             continue
 
+        texto_enlace = enlace.get_text(" ", strip=True)
+
+        contenedor = enlace.find_parent(["tr", "li", "p"])
+        texto_contenedor = contenedor.get_text(" ", strip=True) if contenedor else ""
+
+        texto_combinado = texto_normalizado(f"{texto_enlace} {texto_contenedor}")
+
+        if not any(kw in texto_combinado for kw in keywords):
+            continue
+
         pdf_url = urljoin(BASE_URL, href)
-        encontrados.append({"texto": enlace.get_text(strip=True), "url": pdf_url})
+        if pdf_url in urls_vistas:
+            continue
+        urls_vistas.add(pdf_url)
+
+        etiqueta = texto_enlace or texto_contenedor[:80] or "documento"
+        encontrados.append({"texto": etiqueta, "url": pdf_url})
 
     return encontrados
 
